@@ -1,0 +1,134 @@
+from requests_html import HTMLSession
+import requests
+from bs4 import BeautifulSoup, SoupStrainer
+import re
+import csv
+from itertools import zip_longest
+from urllib.parse import urlparse
+
+s = HTMLSession()
+
+base_url = 'https://www.transfermarkt.co.uk'
+url = 'https://www.transfermarkt.co.uk/club-atletico-boca-juniors/startseite/verein/189'
+
+r = s.get(url)
+
+# links = r.html.find('div#yw1 tr')
+
+jersey_number = []
+player_name = []
+player_link = []
+
+players = r.html.find('tbody td')
+for item in players:
+    try:
+        jersey_number.append(item.find('div.rn_nummer', first=True).text)
+    except:
+        pass
+
+names = r.html.find('tbody td.hauptlink')
+
+for item in names:
+   try:
+
+       player_name.append(item.find('div:nth-child(1) > span > a', first=True).text.replace('á','a').replace('é', 'e').replace('í', 'i').replace('ñ', 'n').replace('ó', 'o').replace('Ó', 'O'))
+
+   except:
+       pass
+
+playerlinks = r.html.find('div.di.nowrap')
+for item in playerlinks:
+    try:
+        player_link.append(base_url + item.find('span.hide-for-small > a', first=True).attrs['href']).text
+    except:
+        pass
+
+player_link.append(base_url + item.find('a', first=True).attrs['href'])
+print(jersey_number)
+print(player_name)
+print(player_link)
+
+
+def get_start11_url (player_url):
+
+    # the input(player_url)is a list of player's main url or one player's main url e.g. player_url = "https://www.transfermarkt.co.uk/luis-oyama/profil/spieler/555277"
+    # you get this from import_players.py .
+
+    # rank_url is the url you get the rank from.
+    start11_base_url = "https://www.transfermarkt.co.uk/ceapi/player/"
+    player = urlparse(player_url)
+    player_web_id = (player.path.rsplit("/", 1)[-1])
+    start11_url = start11_base_url + player_web_id + "/performance"
+
+    return start11_url
+
+
+start11_url = []
+for i in player_link:
+    start11_url.append(get_start11_url(i))
+
+print(start11_url)
+
+rank_url = []
+
+def get_rank_url(player_url):
+    # the input(player_url)is a list of player's main url or one player's main url e.g. player_url = "https://www.transfermarkt.co.uk/luis-oyama/profil/spieler/555277"
+    # you get this from import_players.py .
+
+    # rank_url is the url you get the rank from.
+    rank_url = player_url.replace("profil", "marktwertverlauf")
+
+    return rank_url
+
+
+for i in player_link:
+    rank_url.append(get_rank_url(i))
+
+print(rank_url)
+
+
+player_rank = []
+
+def get_rank(rank_url):
+
+       # e.g. rank_url = 'https://www.transfermarkt.co.uk/rodrigo-de-paul/marktwertverlauf/spieler/255901'
+       # url including player ref
+       # url = "https://www.transfermarkt.co.uk/ceapi/player/255508/performance"
+
+       # required headers. Insomnia does not generate all of these correctly
+       # checking the "timeline" in Insomnia response shows these headers:
+
+       headers = {
+              "cookie": "TMSESID=d837f6de3cea003965eb83fde9e6aac4",
+              "user-agent": "Mozilla/5.0 (X11; Linux x86_64; rv:101.0) Gecko/20100101 Firefox/101.0",
+              "accept": "*\*",
+              "Host": "www.transfermarkt.co.uk"
+              }
+
+       # make the request
+       r = requests.get(rank_url, headers=headers)
+
+       only_span_tags = SoupStrainer("span")
+       soup = BeautifulSoup(r.text, 'html.parser', parse_only= only_span_tags)
+       # find a tags with matching text.
+       rank = []
+       for tag in soup.find_all('span', {'class': re.compile("large")}):
+           rank.append(tag.text)
+
+       return rank[1]
+
+
+for i in rank_url:
+    print(i)
+#    player_rank.append(get_rank(i))
+
+print(player_rank)
+
+'''
+data = [jersey_number, player_name, start11, rank]
+  export_data = zip_longest(*data, fillvalue='')
+  with open('results.csv', 'w', encoding="ISO-8859-1", newline='') as file:
+    write = csv.writer(file)
+    # write.writerow(("jersey_number", "player_name", "start11", "rank")) >> to write headers too, not for database.
+    write.writerows(export_data)
+'''
